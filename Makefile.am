@@ -9,3 +9,7 @@ joy2sumdbindir=$(bindir)
 install-exec-hook:
 	cp utils/joy2sumd.sh $(joy2sumdbindir)/
 	chmod 777 $(joy2sumdbindir)/joy2sumd.sh
+
+uinstall-hook:
+	rm $(joy2sumdbindir)/joy2sumd.sh
+
