@@ -26,14 +26,17 @@ void sumd_init() {
 
     buf[0] = 0xA8;
     buf[1] = 0x01;
-    buf[2] = 0xA0;
+    buf[2] = 0x10;
 }
 
 void sumd_set(uint8_t ch, uint16_t v) {
     if (ch>=SUMD_CHANNEL_MAX) return;
 
-    v <<= 8;
+    if (v>2000) v=2000;
+    if (v<900) v=900;
 
+    v *= 8;
+    
     buf[SUMD_HEADER_LEN+2*ch] = v >> 8;
     buf[SUMD_HEADER_LEN+2*ch+1] = v & 0xFF;
 }

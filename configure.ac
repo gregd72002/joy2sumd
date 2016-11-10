@@ -1,4 +1,4 @@
-AC_INIT([rpi-base],[0.0.1],[gregory.dymarek@gmail.com])
+AC_INIT([joy2sumd],[0.0.1],[gregory.dymarek@gmail.com])
 AM_INIT_AUTOMAKE([1.9 foreign])
 
 AC_PROG_CC

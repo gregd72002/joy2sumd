@@ -16,11 +16,11 @@
 #include <sched.h>
 #include <getopt.h>
 #include <termios.h>
+#include "def.h"
 #include "sumd.h"
 #include "convert_ps3.h"
 
-#define TEST 1
-uint8_t mode = 0;
+uint8_t mode = 0; //0=full, 1=js test
 uint8_t stop = 0;
 
 #define JS_AXIS_MAX 32
@@ -30,12 +30,9 @@ int16_t js_raw_axis[JS_AXIS_MAX];
 uint8_t js_raw_button[JS_BUTTON_MAX];
 
 char js_path[255] = "/dev/input/js0";
-char sumd_path[255] = "/dev/ttyUSB0";
-char telem1_path[255] = "/dev/rfcomm0";
-char telem2_path[255] = "/dev/ttyAMA0";
+char sumd_path[255] = "/dev/ttyACM0";
 
-#define MAX_BUF 256
-int telem1_fd=0, telem2_fd=0, js_fd =0, sumd_fd=0;
+int js_fd =0, sumd_fd=0;
 
 
 void catch_signal(int sig)
@@ -67,24 +64,20 @@ long TimeDiff(struct timespec *ts1, struct timespec *ts2) //return difference be
 }
 
 void print_usage() {
-    printf("Usage: rpi_base -j -a [js_dev] -b [sumd_uart] -c [telem1_uart] -d [telem2_uart] \n");
+    printf("Usage: %s -t -a [js_dev] -b [sumd_uart]\n",PACKAGE_NAME);
     printf("-h\thelp\n");
-    printf("-j\tJoystick test\n");  
+    printf("-t\tJoystick test\n");
     printf("[js_dev] path to joystick dev to read RC from [defaults: %s]\n",js_path);
     printf("[sumd_uart] path to SUMD uart to write RC to [defaults: %s]\n",sumd_path);        
-    printf("[telem1_uart] path to telemetry1 uart [defaults: %s]\n",telem1_path);
-    printf("[telem2_uart] path to telemetry2 uart [defaults: %s]\n",telem2_path);
 }
 
 int set_defaults(int c, char **a) {
     int option;
-    while ((option = getopt(c, a,"a:b:c:d:j")) != -1) {
+    while ((option = getopt(c, a,"a:b:t")) != -1) {
         switch (option)  {
             case 'a': strcpy(js_path,optarg); break;
             case 'b': strcpy(sumd_path,optarg); break;
-            case 'c': strcpy(telem1_path,optarg); break;
-            case 'd': strcpy(telem2_path,optarg); break;
-            case 'j': mode = 1; break;
+            case 't': mode = 1; break;
             default:
                 print_usage();
                 return -1;
@@ -170,27 +163,6 @@ void process_js(int fd) {
         process_jsevent(&js_e_buf[i]);
 }
 
-void forward_telem(int s, int t) {
-    int len,len1;
-    char buf[MAX_BUF];
-
-    len = read(s,buf,MAX_BUF);
-    
-    if (len<=0) {
-        printf("reading error [%i] [%s]\n",errno,strerror(errno));
-        stop = 1;
-        return;
-    }
-            
-    len1 = write(t,buf,len);
-            
-    if (len!=len1) {
-        printf("writing error [%i] [%s]\n",errno,strerror(errno));
-        stop = 1;
-        return;
-    }           
-}
-
 void loop_js() {
     struct js_event js_e;
 
@@ -225,11 +197,7 @@ void loop() {
 
     FD_SET(js_fd, &fdlist);
 
-#ifndef TEST
-    FD_SET(telem1_fd, &fdlist);
-    FD_SET(telem2_fd, &fdlist);
-#endif
-
+    printf("Started.\n");
     while (!stop) {
         rlist = fdlist;
         tv.tv_sec = 0; 
@@ -255,22 +223,17 @@ void loop() {
             continue; 
         }
 
-        if (FD_ISSET(js_fd,&rlist))
+        if (FD_ISSET(js_fd,&rlist)) {
             process_js(js_fd);
-
-        if (FD_ISSET(telem1_fd,&rlist))
-            forward_telem(telem1_fd,telem2_fd);
-
-        if (FD_ISSET(telem2_fd,&rlist))
-            forward_telem(telem2_fd,telem1_fd);
+        }
     }  
 }
 
 void cleanup() {
     if (js_fd) close(js_fd);
-    if (sumd_fd) close(sumd_fd);
-    if (telem1_fd) close(telem1_fd);
-    if (telem2_fd) close(telem2_fd);    
+    if (sumd_fd) close(sumd_fd); 
+
+    printf("Bye.\n");  
 }
 
 int uart_open(const char *path, int flags) {
@@ -283,10 +246,29 @@ int uart_open(const char *path, int flags) {
 
     struct termios options;
     tcgetattr(ret, &options);
-    options.c_cflag = B115200 | CS8 | CLOCAL | CREAD;
-    options.c_iflag = IGNPAR;
+    
+    //options.c_cflag = B115200 | CS8 | CLOCAL | CREAD;
+    //options.c_iflag = IGNPAR;
+    //options.c_lflag = 0;
+    //options.c_oflag = 0;
+
+    options.c_cflag &= ~(CSIZE | PARENB);
+    options.c_cflag |= CS8;
+
+    
+    options.c_iflag &= ~(IGNBRK | BRKINT | ICRNL |
+                     INLCR | PARMRK | INPCK | ISTRIP | IXON);
+    
     options.c_oflag = 0;
-    options.c_lflag = 0;
+
+    
+    options.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
+
+    if(cfsetispeed(&options, B115200) < 0 || cfsetospeed(&options, B115200) < 0) {
+        return -1;
+    }
+
+
     tcflush(ret, TCIFLUSH);
     tcsetattr(ret, TCSANOW, &options);
     return ret; 
@@ -315,30 +297,21 @@ int main(int argc, char **argv) {
         printf("open failed on %s\n",js_path);
         cleanup();
         return -1;
-    }   
+    } 
 
-    if (mode==0) {
-        sumd_fd = uart_open(sumd_path, O_WRONLY | O_NOCTTY | O_SYNC | O_NONBLOCK);
+    if (mode==1) {
+        loop_js();
+        cleanup();
+        return 0;
+    } else {
+        
+        sumd_fd = uart_open(sumd_path, O_WRONLY | O_NOCTTY | O_SYNC | O_NDELAY | O_NONBLOCK);
         if (sumd_fd<0) {
             cleanup();
             return -1;
-        }   
-
-        telem1_fd = uart_open(telem1_path, O_RDWR | O_NOCTTY | O_SYNC | O_NONBLOCK);
-        if (telem1_fd<0) {
-            cleanup();
-            return -1;
-        }
-
-        telem2_fd = uart_open(telem2_path, O_RDWR | O_NOCTTY | O_SYNC | O_NONBLOCK);
-        if (telem2_fd<0) {
-            cleanup();
-            return -1;
-        }
+        }        
 
         loop();
-    } else {
-        loop_js();
     }
 
     cleanup();

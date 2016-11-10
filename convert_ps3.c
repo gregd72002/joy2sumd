@@ -38,8 +38,8 @@ int8_t convertButton(uint8_t n, uint8_t v, uint8_t *ch, uint16_t *ppm) { //this 
 	btn[n] = v;
 
 	switch (n) {
-		case 0: throttle_lock = !throttle_lock; break; //select
-		case 1: break; //l_thumb
+		case 0: throttle_lock = 1; break; //select
+		case 1: throttle_lock = 0; break; //l_thumb
 		case 2: break; //r_thumb
 		case 3: (*ch) = 5; btnCh[*ch] = toggle2Stage(btnCh[*ch]);  (*ppm) = btnCh[*ch]; return 1; break; //start
 		case 4: break; //up
