@@ -22,7 +22,7 @@ static uint16_t sumd_crc16(uint16_t crc, uint8_t value)
 void sumd_init() {
     uint8_t i;
     for (i=0;i<SUMD_CHANNEL_MAX;i++)
-        sumd_set(i,1500);
+        sumd_set(i,1000);
 
     buf[0] = 0xA8;
     buf[1] = 0x01;

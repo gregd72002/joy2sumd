@@ -284,6 +284,7 @@ int main(int argc, char **argv) {
 
 
     sumd_init();
+    convertInit();
 
     for (i=0;i<JS_AXIS_MAX;i++)
         js_raw_axis[i] = 0;
